@@ -1,0 +1,19 @@
+# .gitignore
+
+# Node.js dependencies
+node_modules/
+
+# Build directories
+dist/
+out/
+
+# Editor folders
+.vscode/
+.idea/
+
+# Environment files
+.env
+
+# Cache
+.cache/
+*.log
