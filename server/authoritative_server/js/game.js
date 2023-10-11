@@ -1,23 +1,25 @@
+import { GAME_DIMENSIONS } from './helpers';
+
 const players = {};
 
 const config = {
   type: Phaser.HEADLESS,
   parent: 'phaser-example',
-  width: 800,
-  height: 600,
+  width: GAME_DIMENSIONS.WIDTH,
+  height: GAME_DIMENSIONS.HEIGHT,
   physics: {
     default: 'arcade',
     arcade: {
       debug: false,
-      gravity: { y: 0 }
-    }
+      gravity: { y: 0 },
+    },
   },
   scene: {
     preload: preload,
     create: create,
-    update: update
+    update: update,
   },
-  autoFocus: false
+  autoFocus: false,
 };
 
 function preload() {
@@ -31,10 +33,14 @@ function create() {
 
   this.scores = {
     blue: 0,
-    red: 0
+    red: 0,
   };
 
-  this.star = this.physics.add.image(randomPosition(700), randomPosition(500), 'star');
+  this.star = this.physics.add.image(
+    randomPosition(700),
+    randomPosition(500),
+    'star'
+  );
   this.physics.add.collider(this.players);
 
   this.physics.add.overlap(this.players, this.star, function (star, player) {
@@ -56,12 +62,12 @@ function create() {
       x: Math.floor(Math.random() * 700) + 50,
       y: Math.floor(Math.random() * 500) + 50,
       playerId: socket.id,
-      team: (Math.floor(Math.random() * 2) == 0) ? 'red' : 'blue',
+      team: Math.floor(Math.random() * 2) == 0 ? 'red' : 'blue',
       input: {
         left: false,
         right: false,
-        up: false
-      }
+        up: false,
+      },
     };
     // add player to server
     addPlayer(self, players[socket.id]);
@@ -94,16 +100,20 @@ function create() {
 function update() {
   this.players.getChildren().forEach((player) => {
     const input = players[player.playerId].input;
-    if (input.left) {
+    if (input.left && !input.right) {
       player.setAngularVelocity(-300);
-    } else if (input.right) {
+    } else if (input.right && !input.left) {
       player.setAngularVelocity(300);
     } else {
       player.setAngularVelocity(0);
     }
 
     if (input.up) {
-      this.physics.velocityFromRotation(player.rotation + 1.5, 200, player.body.acceleration);
+      this.physics.velocityFromRotation(
+        player.rotation + 1.5,
+        200,
+        player.body.acceleration
+      );
     } else {
       player.setAcceleration(0);
     }
@@ -129,7 +139,10 @@ function handlePlayerInput(self, playerId, input) {
 }
 
 function addPlayer(self, playerInfo) {
-  const player = self.physics.add.image(playerInfo.x, playerInfo.y, 'ship').setOrigin(0.5, 0.5).setDisplaySize(53, 40);
+  const player = self.physics.add
+    .image(playerInfo.x, playerInfo.y, 'ship')
+    .setOrigin(0.5, 0.5)
+    .setDisplaySize(53, 40);
   player.setDrag(100);
   player.setAngularDrag(100);
   player.setMaxVelocity(200);

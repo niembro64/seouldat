@@ -1,13 +1,15 @@
+import { GAME_DIMENSIONS } from '../../authoritative_server/js/helpers';
+
 var config = {
   type: Phaser.AUTO,
   parent: 'phaser-example',
-  width: 800,
-  height: 600,
+  width: GAME_DIMENSIONS.WIDTH,
+  height: GAME_DIMENSIONS.HEIGHT,
   scene: {
     preload: preload,
     create: create,
-    update: update
-  }
+    update: update,
+  },
 };
 
 var game = new Phaser.Game(config);
@@ -23,8 +25,14 @@ function create() {
   this.socket = io();
   this.players = this.add.group();
 
-  this.blueScoreText = this.add.text(16, 16, '', { fontSize: '32px', fill: '#0000FF' });
-  this.redScoreText = this.add.text(584, 16, '', { fontSize: '32px', fill: '#FF0000' });
+  this.blueScoreText = this.add.text(16, 16, '', {
+    fontSize: '32px',
+    fill: '#0000FF',
+  });
+  this.redScoreText = this.add.text(584, 16, '', {
+    fontSize: '32px',
+    fill: '#FF0000',
+  });
 
   this.socket.on('currentPlayers', function (players) {
     Object.keys(players).forEach(function (id) {
@@ -83,28 +91,28 @@ function update() {
   const right = this.rightKeyPressed;
   const up = this.upKeyPressed;
 
-  if (this.cursors.left.isDown) {
-    this.leftKeyPressed = true;
-  } else if (this.cursors.right.isDown) {
-    this.rightKeyPressed = true;
-  } else {
-    this.leftKeyPressed = false;
-    this.rightKeyPressed = false;
-  }
+  this.leftKeyPressed = this.cursors.left.isDown;
+  this.rightKeyPressed = this.cursors.right.isDown;
+  this.upKeyPressed = this.cursors.up.isDown;
 
-  if (this.cursors.up.isDown) {
-    this.upKeyPressed = true;
-  } else {
-    this.upKeyPressed = false;
-  }
-
-  if (left !== this.leftKeyPressed || right !== this.rightKeyPressed || up !== this.upKeyPressed) {
-    this.socket.emit('playerInput', { left: this.leftKeyPressed , right: this.rightKeyPressed, up: this.upKeyPressed });
+  if (
+    left !== this.leftKeyPressed ||
+    right !== this.rightKeyPressed ||
+    up !== this.upKeyPressed
+  ) {
+    this.socket.emit('playerInput', {
+      left: this.leftKeyPressed,
+      right: this.rightKeyPressed,
+      up: this.upKeyPressed,
+    });
   }
 }
 
 function displayPlayers(self, playerInfo, sprite) {
-  const player = self.add.sprite(playerInfo.x, playerInfo.y, sprite).setOrigin(0.5, 0.5).setDisplaySize(53, 40);
+  const player = self.add
+    .sprite(playerInfo.x, playerInfo.y, sprite)
+    .setOrigin(0.5, 0.5)
+    .setDisplaySize(53, 40);
   if (playerInfo.team === 'blue') player.setTint(0x0000ff);
   else player.setTint(0xff0000);
   player.playerId = playerInfo.playerId;
