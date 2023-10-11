@@ -1,5 +1,3 @@
-import { GAME_DIMENSIONS } from './helpers';
-
 const players = {};
 
 const config = {

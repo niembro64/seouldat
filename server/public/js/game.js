@@ -1,5 +1,3 @@
-import { GAME_DIMENSIONS } from '../../authoritative_server/js/helpers';
-
 var config = {
   type: Phaser.AUTO,
   parent: 'phaser-example',
