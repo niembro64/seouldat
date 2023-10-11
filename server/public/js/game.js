@@ -1,8 +1,8 @@
 var config = {
   type: Phaser.AUTO,
   parent: 'phaser-example',
-  width: 800,
-  height: 600,
+  width: 1920,
+  height: 1080,
   scene: {
     preload: preload,
     create: create,
