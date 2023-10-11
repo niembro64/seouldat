@@ -3,8 +3,8 @@ import { GAME_DIMENSIONS } from '../../authoritative_server/js/helpers';
 var config = {
   type: Phaser.AUTO,
   parent: 'phaser-example',
-  width: GAME_DIMENSIONS.WIDTH,
-  height: GAME_DIMENSIONS.HEIGHT,
+  width: 1920,
+  height: 1080,
   scene: {
     preload: preload,
     create: create,

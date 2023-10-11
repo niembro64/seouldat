@@ -5,8 +5,8 @@ const players = {};
 const config = {
   type: Phaser.HEADLESS,
   parent: 'phaser-example',
-  width: GAME_DIMENSIONS.WIDTH,
-  height: GAME_DIMENSIONS.HEIGHT,
+  width: 1920,
+  height: 1080,
   physics: {
     default: 'arcade',
     arcade: {
