@@ -1,0 +1,309 @@
+
+================================================================================
+BUDGET ANNIHILATION — ISSUES
+
+This is "issues.txt" for this game "budget-annihilation" (i.e. "rts-prototype").
+
+Your task is to fix the issues documented here.
+
+Errors, Problems, Inconsistencies, TODOs, etc are listed here. As we fix
+something we should completely delete it from this file. You should also delete
+an item if you know for a fact it has been addressed. Remember that our code may
+have changed since the issue was written; check the code and if the issue is no
+longer relevant, delete it.
+
+Do not document "PROGRESS" in this file, just document or update issues that need to be resolved. If you see any "progress" information in this file, just remove it, or convert it into something actionable. Just documenting progress is not helpful - update the issue with the current state and the required fixes for it.
+
+Please always commit and push before and after any code changes we make.
+================================================================================
+
+Seouldat PeerJS / RTS-style lobby migration audit
+==================================================
+
+Reference project audited: /Users/ericniemeyer/code/rts-prototype
+Current project audited: /Users/ericniemeyer/code/seouldat
+
+Current state
+-------------
+- seouldat is a small Phaser 3.15 game served by Express from server/public.
+- Networking is Socket.IO 2.1.1:
+  - server/public/js/game.js connects with io(), sends playerInput, and renders server events.
+  - server/authoritative_server/js/game.js runs a Phaser.HEADLESS authority in JSDOM and emits full playerUpdates every tick.
+  - server/index.js boots Express, Socket.IO, JSDOM, canvas/datauri support, then listens on port 8082.
+- Socket IDs are currently the player IDs. That couples identity, roster, reconnect behavior, and sprite ownership to Socket.IO.
+- There is no lobby, room code, host/client role, player assignment, heartbeat, game-start handoff, or PeerJS signaling path yet.
+
+rts-prototype pattern to adapt
+------------------------------
+- PeerJS transport lives in src/game/network/NetworkManager.ts.
+- Room codes are short human codes mapped to PeerJS IDs by NetworkRoomCode.ts.
+- Lobby state is managed as a roster by NetworkLobbyRoster.ts.
+- Host and client setup are explicit:
+  - hostGame() creates a PeerJS host with a room-derived peer ID.
+  - joinGame(code) creates a random client peer ID and connects to the host peer ID.
+  - incoming clients receive playerAssignment, playerJoined backfill, lobbySettings, and later gameStart.
+- A heartbeat layer closes silent/disconnected peers while the lobby is open.
+- The host owns lobby settings and broadcasts the whole settings object to clients.
+- startGame() builds a battle handoff containing gameId, roomCode, playerIds, roster, and settings.
+- The authoritative game server and render client talk through a GameConnection-style abstraction:
+  - LocalGameConnection for the host/local client.
+  - RemoteGameConnection for remote clients.
+- Commands flow client -> host, snapshots flow host -> clients. The network layer has separate command and snapshot responsibilities.
+
+Migration issues / work items
+-----------------------------
+
+[ ] 1. Decide the runtime shape before writing PeerJS code.
+    Recommendation: make the browser host the authoritative server, like rts-prototype does, and retire the Node/JSDOM authoritative Phaser process after parity.
+    Why: PeerJS is meant to connect browsers through WebRTC. Keeping the current Node JSDOM server as the authority would preserve the old central-server model and would not match the "other games" lobby/host flow.
+    Acceptance:
+    - Express only serves static files during/after migration.
+    - The host browser owns simulation and sends snapshots.
+    - Remote browsers only send input and render host state.
+
+[ ] 2. Add PeerJS dependency and remove Socket.IO dependencies after the replacement is live.
+    Current package.json dependencies to replace later: socket.io, jsdom, canvas, datauri.
+    Options:
+    - Minimal path: keep static script tags and load PeerJS from npm/CDN.
+    - RTS-like path: introduce a Vite/module layout and import peerjs from package.json.
+    Acceptance:
+    - package.json includes peerjs.
+    - /socket.io/socket.io.js is removed from server/public/index.html.
+    - server/index.js no longer constructs SocketIO or JSDOM once PeerJS authority is working.
+
+[ ] 3. Define a small seouldat network protocol before touching the game loop.
+    Start with these message types, adapted from rts-prototype:
+    - heartbeat: { type, gameId, playerId, playerInfo?, players? }
+    - playerAssignment: { type, gameId, playerId }
+    - playerJoined: { type, gameId, playerId, playerName }
+    - playerLeft: { type, gameId, playerId }
+    - lobbySettings: { type, gameId, settings }
+    - gameStart: { type, gameId, playerIds, handoff, assignedPlayerId }
+    - playerInput: { type, gameId, input }
+    - state: { type, gameId, players, scores, star }
+    Acceptance:
+    - All network messages carry gameId or are explicitly setup-only.
+    - Player identity uses stable numeric player IDs, not socket/peer connection IDs.
+    - Host is always player 1.
+
+[ ] 4. Add room-code utilities.
+    Mirror rts-prototype/src/game/network/NetworkRoomCode.ts:
+    - generate a 4-character human code with unambiguous characters.
+    - normalize user-entered codes to uppercase.
+    - convert room code to a PeerJS ID, for example sd-ABCD.
+    Acceptance:
+    - Host displays one room code.
+    - Client can join with lowercase or whitespace-padded input.
+    - Peer ID prefix is project-specific and will not collide with rts-prototype's ba-* IDs.
+
+[ ] 5. Build a vanilla NetworkManager for seouldat.
+    Reference: rts-prototype/src/game/network/NetworkManager.ts.
+    Required behavior:
+    - hostGame(): create Peer(roomCodeToGameId(code)), seed host roster, handle unavailable-id by retrying a new code.
+    - joinGame(code): create random client Peer ID, connect to host, handle peer-unavailable and timeout errors.
+    - handleIncomingConnection(): assign the next numeric player ID, reject joins after start, enforce max players.
+    - setupConnectionHandlers(): handle data, close, error, and dataChannel monitoring.
+    - safeSend(): central send wrapper that checks conn.open and catches send errors.
+    - disconnect(): close connections, destroy peer, clear callbacks and timers.
+    Acceptance:
+    - Two browser tabs can host/join a lobby without starting the game.
+    - Connection failures surface as lobby errors.
+    - Leaving the lobby tears down PeerJS cleanly enough to host/join again without refresh.
+
+[ ] 6. Add heartbeat and silent-disconnect cleanup.
+    Reference: rts-prototype/src/game/network/NetworkHeartbeatTracker.ts.
+    Required behavior:
+    - Send heartbeat every ~2 seconds while in the lobby.
+    - Mark a peer alive on any inbound message, not only heartbeat.
+    - Close peers that have not sent anything for ~30 seconds before game start.
+    Acceptance:
+    - Closing a joined tab removes that player from the host and remaining clients.
+    - Frozen or network-disconnected clients eventually leave the roster even if PeerJS close does not fire.
+
+[ ] 7. Add lobby roster management.
+    Reference: rts-prototype/src/game/network/NetworkLobbyRoster.ts.
+    Required behavior:
+    - Store playerId, name, isHost, and optional info fields.
+    - Host seeds player 1.
+    - Host backfills the full roster to a newly connected player.
+    - Host broadcasts playerJoined/playerLeft/playerInfoUpdate to all clients.
+    Acceptance:
+    - All clients show the same lobby player list.
+    - Local player row is identifiable.
+    - Host badge and basic player names are present. IP/location/timezone can be deferred if not useful for this game.
+
+[ ] 8. Add lobby UI to server/public/index.html and server/public/style.css.
+    Reference: rts-prototype/src/components/LobbyModal.vue for flow, not framework.
+    Required screens:
+    - Initial: Host, Join code input, error area.
+    - Connecting: cancel button.
+    - Lobby: room code with copy action, roster, Start for host, waiting text for clients, Leave.
+    Acceptance:
+    - The Phaser canvas is not the only first screen anymore.
+    - Host and join actions call NetworkManager.
+    - Start is host-only.
+    - Leave cancels connections and returns to the initial screen.
+
+[ ] 9. Add a game-start handoff.
+    Reference: rts-prototype/src/game/network/NetworkBattleHandoff.ts and NetworkManager.startGame().
+    Required behavior:
+    - Host sends gameStart with gameId, roomCode, playerIds, roster, and game settings.
+    - Each client receives assignedPlayerId.
+    - Host rejects late joiners after gameStarted = true.
+    Acceptance:
+    - Host and all connected clients start the same match with the same player IDs.
+    - The current team assignment logic no longer depends on connection order hidden inside Socket.IO.
+
+[ ] 10. Extract authoritative game state from server/authoritative_server/js/game.js into browser-usable modules.
+    Current server game code mixes:
+    - player state storage
+    - Phaser physics objects
+    - Socket.IO connection handlers
+    - score/star broadcast
+    Split into:
+    - authoritative scene/server: owns Phaser physics, players, scores, star, update loop.
+    - network adapter: receives playerInput and publishes state.
+    - renderer/client scene: draws snapshots and collects local input.
+    Acceptance:
+    - The authoritative scene does not import or reference io/socket.
+    - The same authority can run for the host without JSDOM.
+    - Current physics behavior, wrapping, scoring, and star relocation are preserved.
+
+[ ] 11. Replace Socket.IO player IDs with stable numeric IDs everywhere.
+    Current files affected:
+    - server/public/js/game.js compares playerInfo.playerId to self.socket.id.
+    - server/authoritative_server/js/game.js stores players[socket.id].
+    Required behavior:
+    - localPlayerId comes from NetworkManager.
+    - players are keyed by numeric playerId.
+    - host is player 1; clients are 2..N.
+    Acceptance:
+    - Local player sprite uses the ship texture based on localPlayerId.
+    - Remote player sprites use the otherPlayer texture.
+    - Disconnect removes the correct numeric player.
+
+[ ] 12. Create a local host connection path.
+    Reference: rts-prototype/src/game/server/LocalGameConnection.ts.
+    Required behavior:
+    - Host input should flow through the same playerInput doorway as remote input.
+    - Host renderer should receive the same state shape as remote clients.
+    - Host can either loop state through the same serializer or directly call the renderer callback.
+    Acceptance:
+    - Host can play in the hosted match.
+    - Host sees the same score/star/player state that clients see.
+    - No special Socket.IO-only host code remains.
+
+[ ] 13. Create a remote client connection path.
+    Reference: rts-prototype/src/game/server/RemoteGameConnection.ts, simplified.
+    Required behavior:
+    - Remote clients send playerInput to host.
+    - Remote clients receive state snapshots from host.
+    - Remote clients do not run authoritative physics or star overlap scoring.
+    Acceptance:
+    - Joined client controls only its own ship.
+    - Client movement only changes after host accepts input and publishes state.
+    - Score changes only when the host authority detects star overlap.
+
+[ ] 14. Add snapshot publishing from host to clients.
+    Start simple; this game does not need RTS delta compression yet.
+    Required payload:
+    - players: id, x, y, rotation, team
+    - scores: blue/red
+    - star: x/y
+    Suggested cadence: 20-30 Hz initially, then tune.
+    Add basic backpressure checks with conn.dataChannel.bufferedAmount before sending large or frequent states.
+    Acceptance:
+    - Clients render smooth enough for the current game.
+    - A slow client does not crash the host send loop.
+    - A periodic full state is enough to recover from missed messages.
+
+[ ] 15. Port the client renderer away from Socket.IO events.
+    Current file: server/public/js/game.js.
+    Replace handlers:
+    - currentPlayers/newPlayer/playerUpdates -> one state intake that upserts/removes sprites from the authoritative state.
+    - updateScore -> read from state.scores.
+    - starLocation -> read from state.star.
+    - disconnect -> playerLeft message.
+    Replace emit:
+    - this.socket.emit('playerInput', ...) -> network.sendPlayerInput(...).
+    Acceptance:
+    - server/public/js/game.js has no io(), socket.on, or socket.emit.
+    - The render scene can be started after gameStart with localPlayerId/playerIds.
+
+[ ] 16. Add client readiness or a simple startup gate.
+    Reference: rts-prototype clientReady/startup gate.
+    Minimal version:
+    - Clients send clientReady after Phaser scene create() completes.
+    - Host begins publishing state immediately, but can keep a pending full state for late ready clients.
+    Better version:
+    - Host waits for all connected players to be ready before unpausing the authoritative scene.
+    Acceptance:
+    - Clients do not miss the initial full player/star/score state.
+    - Start works reliably in two tabs without refreshes.
+
+[ ] 17. Remove the JSDOM authoritative server path after browser-host authority is stable.
+    Files to delete or retire:
+    - server/authoritative_server/index.html
+    - server/authoritative_server/js/game.js
+    - duplicated authoritative assets under server/authoritative_server/assets
+    - JSDOM/canvas/datauri setup in server/index.js
+    Acceptance:
+    - npm/yarn start serves static assets only.
+    - No headless Phaser boot happens in Node.
+    - The old Socket.IO server is gone.
+
+[ ] 18. Keep a temporary compatibility branch if needed.
+    During migration, it may be useful to keep the Socket.IO version runnable until PeerJS parity is proven.
+    If so:
+    - Put the new PeerJS path behind a query param or separate entry script.
+    - Do not let both transports write to the same Phaser scene at once.
+    Acceptance:
+    - There is one active transport per page load.
+    - The fallback can be removed cleanly when PeerJS tests pass.
+
+[ ] 19. Add local multi-tab testing notes/scripts.
+    Test cases:
+    - Host lobby, copy room code.
+    - Join from second tab.
+    - Start match.
+    - Host and client both move.
+    - Star pickup updates score on both tabs.
+    - Client leaves during lobby.
+    - Client leaves during game.
+    - Host leaves during lobby/game.
+    - Bad room code shows a useful error.
+    - Host retries if room code Peer ID is unavailable.
+    Acceptance:
+    - A manual test checklist lives in this repo.
+    - The project can be verified without touching rts-prototype.
+
+[ ] 20. Consider adding a self-hosted PeerJS signaling server override for local/repeated testing.
+    Reference: rts-prototype's VITE_BA_PEER_HOST / PORT / PATH / SECURE override.
+    For this project, equivalent environment or config names could be SEOULDAT_PEER_HOST or VITE_SEOULDAT_PEER_HOST depending on whether a bundler is added.
+    Acceptance:
+    - Default behavior uses PeerJS public signaling.
+    - Local testing can point at a local peerjs server to avoid public-cloud throttling.
+
+[ ] 21. Final cleanup and dependency audit.
+    Remove once unused:
+    - socket.io
+    - jsdom
+    - canvas
+    - datauri
+    - server/authoritative_server duplicate assets/files
+    Verify:
+    - yarn.lock/package lock matches package.json.
+    - start script still launches the static server.
+    - no code references io, SocketIO, JSDOM, socket.id, or /socket.io/socket.io.js.
+
+Recommended implementation order
+--------------------------------
+1. Add PeerJS dependency, room-code helpers, NetworkManager skeleton, and lobby UI.
+2. Get host/join/leave roster working with no game start.
+3. Add gameStart handoff and stable numeric player IDs.
+4. Extract the authoritative Phaser logic from Socket.IO.
+5. Run authority in the host browser and render local host through the same state shape as clients.
+6. Wire remote input and host snapshots.
+7. Add heartbeat, readiness, and disconnect cleanup.
+8. Delete Socket.IO/JSDOM server code and unused dependencies.
+9. Run the multi-tab test checklist and tune snapshot cadence/backpressure.
