@@ -1,8 +1,7 @@
-
 ================================================================================
-BUDGET ANNIHILATION — ISSUES
+SEOULDAT SHOOTER — ISSUES
 
-This is "issues.txt" for this game "budget-annihilation" (i.e. "rts-prototype").
+This is "issues.txt" for this game "seouldat".
 
 Your task is to fix the issues documented here.
 

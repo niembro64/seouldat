@@ -1,11 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <link
-      rel="shortcut icon"
-      href="../public/assets/star_gold.png"
-      type="image/x-icon"
-    />
+    <link rel="shortcut icon" href="assets/star_gold.png" type="image/x-icon" />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="style.css" />
@@ -13,8 +9,89 @@
   </head>
 
   <body>
-    <div id="phaser-example" class="phaser-example" />
-    <script src="/socket.io/socket.io.js"></script>
+    <main class="app-shell">
+      <section id="lobby-overlay" class="lobby-overlay">
+        <div id="start-screen" class="lobby-panel">
+          <div class="title-block">
+            <h1>Seouldat</h1>
+            <p>Peer-hosted arena</p>
+          </div>
+
+          <div class="action-stack">
+            <button id="host-button" class="primary-button" type="button">
+              Host
+            </button>
+            <div class="join-row">
+              <input
+                id="join-code-input"
+                class="code-input"
+                type="text"
+                maxlength="4"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                placeholder="CODE"
+              />
+              <button id="join-button" class="secondary-button" type="button">
+                Join
+              </button>
+            </div>
+          </div>
+          <p id="start-error" class="error-text" hidden></p>
+        </div>
+
+        <div id="connecting-screen" class="lobby-panel" hidden>
+          <div class="title-block">
+            <h1>Connecting</h1>
+            <p id="connecting-text">Opening peer connection...</p>
+          </div>
+          <div class="spinner" aria-hidden="true"></div>
+          <button id="cancel-connecting-button" class="secondary-button" type="button">
+            Cancel
+          </button>
+        </div>
+
+        <div id="room-screen" class="lobby-panel lobby-room" hidden>
+          <div class="room-header">
+            <div>
+              <span class="eyebrow">Lobby Code</span>
+              <button id="room-code-button" class="room-code" type="button" title="Copy room code">
+                ----
+              </button>
+            </div>
+            <div class="room-actions">
+              <button id="leave-lobby-button" class="secondary-button" type="button">
+                Leave
+              </button>
+              <button id="start-game-button" class="primary-button" type="button">
+                Start
+              </button>
+            </div>
+          </div>
+
+          <div class="roster-section">
+            <h2>Players</h2>
+            <ul id="player-list" class="player-list"></ul>
+          </div>
+          <p id="lobby-error" class="error-text" hidden></p>
+        </div>
+      </section>
+
+      <section id="game-shell" class="game-shell" hidden>
+        <div class="game-topbar">
+          <div>
+            <span id="game-role" class="eyebrow">Player</span>
+            <strong id="game-room-code">----</strong>
+          </div>
+          <button id="leave-game-button" class="secondary-button compact" type="button">
+            Leave
+          </button>
+        </div>
+        <div id="phaser-example" class="phaser-example"></div>
+      </section>
+    </main>
+
+    <script src="/vendor/peerjs/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.15.1/dist/phaser.min.js"></script>
     <script src="js/game.js"></script>
   </body>
